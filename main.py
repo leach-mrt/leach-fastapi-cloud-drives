@@ -4,7 +4,21 @@ from fastapi_cloud_drives import GoogleDriveConfig
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+import json, os
+app = FastAPI()
+
+from logging import debug
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse
+from starlette.requests import Request
+from fastapi_cloud_drives import DropBoxConfig, DropBox
+from starlette.middleware.sessions import SessionMiddleware
+from dropbox import DropboxOAuth2Flow
+from starlette.responses import RedirectResponse
 import os
+import tempfile
+
+
 app = FastAPI()
 
 # google_conf = {
@@ -43,27 +57,13 @@ app = FastAPI()
 #     return JSONResponse(status_code=200, content=r)
 
 
-from logging import debug
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-from starlette.requests import Request
-from fastapi_cloud_drives import DropBoxConfig, DropBox
-from starlette.middleware.sessions import SessionMiddleware
-from dropbox import DropboxOAuth2Flow
-from starlette.responses import RedirectResponse
-import os
-
-app = FastAPI()
-
-
 app.add_middleware(SessionMiddleware, secret_key="my_secret")
 
 REDIRECT_URI = "http://127.0.0.1:8020/auth"
 
 
 conf  = DropBoxConfig(
-    APP_KEY="",
-    APP_SECRET="")
+    )
 
 
 def dropbox_auth_flow(session):
@@ -85,6 +85,9 @@ def dropbox_auth_finish(session, request):
     
         os.environ['DROPBOX_REFRESH_TOKEN'] = response.refresh_token
         os.environ['DROPBOX_ACCESS_TOKEN'] = response.access_token
+
+        print(response.refresh_token)
+        print(response.access_token)
 
         conf.DROPBOX_REFRESH_TOKEN =  response.refresh_token
         conf.DROPBOX_ACCESS_TOKEN =  response.access_token
@@ -112,7 +115,7 @@ async def finish_auth(request: Request):
 async def list_buckets():
 
     async with DropBox(conf) as drop:
-        result = await drop.list_files("/path")
+        result = await drop.list_files("", recursive=True)
 
     return JSONResponse(status_code=200, content=result)
 
@@ -155,4 +158,19 @@ async def upload_file():
 
     return JSONResponse(status_code=200, content={"result":True})
 
+def save_file_locally(client: DropBox, file_path:str, to_file_path_wo_fname:str):
+        metadata, res = client.files_download(file_path)
+        with open(os.path.join(to_file_path_wo_fname, metadata.name), "wb") as f:
+            f.write(res.content)
 
+@app.get("/search")
+async def search():
+    async with DropBox(conf) as drop:
+        result = drop.client.files_search(query=".md", path="")
+        print(result.matches)
+        for match in result.matches:
+            with tempfile.TemporaryDirectory() as dname:
+                print(dname)
+                save_file_locally(drop.client, match.metadata.path_display, dname)
+                print("saved")
+    return JSONResponse(status_code=200, content=result.matches)
