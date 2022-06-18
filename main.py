@@ -173,4 +173,9 @@ async def search():
                 print(dname)
                 save_file_locally(drop.client, match.metadata.path_display, dname)
                 print("saved")
-    return JSONResponse(status_code=200, content=result.matches)
+    return JSONResponse(
+        status_code=200, 
+        content={
+            "files":[match.metadata.path_display for match in result.matches]
+        }
+    )
